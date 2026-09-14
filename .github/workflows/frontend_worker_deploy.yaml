@@ -1,0 +1,48 @@
+name: Deploy Frontend Worker
+
+on:
+  workflow_run:
+    workflows: [Upstream Sync]
+    types: [completed]
+  push:
+    tags:
+      - "*"
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Install Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+
+      - uses: pnpm/action-setup@v5
+        name: Install pnpm
+        id: pnpm-install
+        with:
+          version: 10
+          run_install: false
+
+      - name: Build & Deploy tmail-frontend (static assets worker)
+        run: |
+          cd frontend/
+          printf '%s\n' "$FRONTEND_ENV_CONTENT" > .env.prod
+          cat > wrangler.toml <<'TOMLEOF'
+          name = "tmail-frontend"
+          compatibility_date = "2026-05-04"
+
+          [assets]
+          directory = "./dist"
+          TOMLEOF
+          pnpm install --no-frozen-lockfile
+          pnpm run build
+          pnpm exec wrangler deploy
+        env:
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          FRONTEND_ENV_CONTENT: ${{ secrets.FRONTEND_ENV }}
